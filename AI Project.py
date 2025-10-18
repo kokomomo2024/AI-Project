@@ -1,176 +1,123 @@
-import os
 import streamlit as st
-from PIL import Image
-import random
 import pandas as pd
+import os
 from datetime import datetime
 from io import BytesIO
-import numpy as np
-import soundfile as sf
-import openai
-from gtts import gTTS
 
-# ----------------- Configuration -----------------
-openai.api_key = os.getenv("OPENAI_API_KEY", "")
 RESULTS_PATH = "results.xlsx"
-GPT_MODEL = os.getenv("GPT_MODEL", "gpt-4o-mini")
 
-st.set_page_config(page_title="AI Project", layout="wide", page_icon=":wrench:")
-
-# ----------------- Helper functions -----------------
-def classify_image_text_only(image):
-    labels_ar = ["سليمة", "عيب مورد", "عيب تجميع"]
-    return random.choice(labels_ar)
-
+# ----------------- تحميل النتائج -----------------
 def load_results(path=RESULTS_PATH):
     if os.path.exists(path):
         try:
-            return pd.read_excel(path)
+            df = pd.read_excel(path)
+            # إضافة الأعمدة الجديدة لو مش موجودة
+            for col in ["Code", "Supplier"]:
+                if col not in df.columns:
+                    df[col] = ""
+            return df
         except Exception:
-            return pd.DataFrame(columns=["Image Name", "Result", "Time"])
+            return pd.DataFrame(columns=["Image Name", "Result", "Time", "Code", "Supplier"])
     else:
-        return pd.DataFrame(columns=["Image Name", "Result", "Time"])
+        return pd.DataFrame(columns=["Image Name", "Result", "Time", "Code", "Supplier"])
 
-def save_result(filename, result, path=RESULTS_PATH):
-    df = load_results(path)
-    new_row = {
-        "Image Name": filename,
-        "Result": result,
-        "Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+# ----------------- حفظ النتائج -----------------
+def save_results(df, path=RESULTS_PATH):
     df.to_excel(path, index=False)
-    return df
 
+# ----------------- حذف النتائج -----------------
+def clear_results(path=RESULTS_PATH):
+    if os.path.exists(path):
+        os.remove(path)
+
+# ----------------- تحويل لملف Excel -----------------
 def results_to_excel_bytes(df):
     buffer = BytesIO()
     df.to_excel(buffer, index=False)
     buffer.seek(0)
     return buffer.getvalue()
 
-def clear_results(path=RESULTS_PATH):
-    if os.path.exists(path):
-        os.remove(path)
+# ----------------- واجهة إدارة النتائج -----------------
+st.set_page_config(page_title="📊 Results Management", page_icon="📋", layout="wide")
 
-# ----------------- Page styling -----------------
-page_css = """
-<style>
-[data-testid="stAppViewContainer"] > .main {
-  background: linear-gradient(180deg, #fff6fb 0%, #fff0f6 100%);
-}
-.main .block-container {
-  background: rgba(255, 255, 255, 0.66);
-  border-radius: 12px;
-  padding: 1.25rem 1.5rem;
-}
-.header-title { color: #AD1457; font-weight: 800; font-size:34px; margin:0; }
-.header-sub { color: #6b2b3b; margin-top:6px; font-weight:600; }
-.stButton>button {
-  background: linear-gradient(90deg, #ff9fc0, #ff6fa3);
-  color: white;
-  border-radius: 10px;
-}
-[data-testid="stDataFrameContainer"] {
-  background: rgba(255,255,255,0.7) !important;
-  border-radius: 8px;
-  padding: 0.5rem;
-}
-.signature {
-  text-align: center;
-  margin-top: 1.25rem;
-  font-size: 20px;
-  font-weight: 800;
-  background: -webkit-linear-gradient(#ff5fa8, #ffd166);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-</style>
-"""
-st.markdown(page_css, unsafe_allow_html=True)
+st.title("📋 Results Management")
+st.markdown("أدخل بيانات إضافية (الكود + المورد)، وشاهد أو احذف نتائج التصنيف.")
 
-# ----------------- Header -----------------
-col1, col2 = st.columns([0.82, 0.18])
+# تحميل البيانات
+df = load_results()
+
+# نموذج إدخال البيانات الجديدة
+st.subheader("➕ إضافة بيانات جديدة يدوياً")
+col1, col2, col3, col4, col5 = st.columns(5)
+
 with col1:
-    st.markdown('<h1 class="header-title">AI Project — Designed by Mohamed Ashraf</h1>', unsafe_allow_html=True)
-    st.markdown('<div class="header-sub"><em>AI-powered defect classification and analysis</em></div>', unsafe_allow_html=True)
+    img_name = st.text_input("🖼️ اسم الصورة", placeholder="example.jpg")
 with col2:
+    result = st.selectbox("📌 النتيجة", ["", "سليمة", "عيب مورد", "عيب تجميع"])
+with col3:
+    code = st.text_input("🧾 الكود", placeholder="EX12345")
+with col4:
+    supplier = st.text_input("🏢 المورد", placeholder="Company A")
+with col5:
     st.write("")
+    add_btn = st.button("💾 حفظ")
+
+if add_btn:
+    if img_name and result:
+        new_row = {
+            "Image Name": img_name,
+            "Result": result,
+            "Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Code": code,
+            "Supplier": supplier
+        }
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        save_results(df)
+        st.success("✅ تم إضافة البيانات وحفظها بنجاح.")
+        st.experimental_rerun()
+    else:
+        st.warning("⚠️ من فضلك أدخل على الأقل اسم الصورة والنتيجة.")
 
 st.markdown("---")
 
-# ----------------- Main layout -----------------
-left, right = st.columns([2, 1])
+# عرض النتائج الحالية
+st.subheader("📊 النتائج المسجلة")
 
-with left:
-    uploaded_file = st.file_uploader("Upload part image (jpg, jpeg, png)", type=["jpg", "jpeg", "png"])
-    if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded image", use_container_width=True)
-        if st.button("Analyze (text only)"):
-            with st.spinner("Analyzing..."):
-                result_ar = classify_image_text_only(image)
-                st.markdown(f"<h2 style='color:#c2185b'>Result: <span style='background:rgba(255,255,255,0.88);padding:6px 10px;border-radius:8px;font-weight:700;'>{result_ar}</span></h2>", unsafe_allow_html=True)
-                save_result(uploaded_file.name, result_ar)
-                st.success("تم حفظ النتيجة في الملف results.xlsx")
+if df.empty:
+    st.warning("⚠️ لا توجد نتائج حالياً.")
+else:
+    st.write(f"إجمالي النتائج: **{len(df)}**")
+    st.dataframe(df, use_container_width=True)
 
-with right:
-    st.subheader("Actions")
-    df = load_results()
-    st.write("Total results:", len(df))
-    if not df.empty:
-        st.dataframe(df)
+    # تحديد صف للحذف
+    selected_index = st.number_input("اكتب رقم الصف الذي تريد حذفه (ابدأ من 0):", min_value=0, max_value=len(df)-1 if len(df)>0 else 0, step=1)
+
+    col1, col2, col3 = st.columns([1,1,2])
+    with col1:
+        if st.button("🗑️ حذف الصف المحدد"):
+            if len(df) > 0:
+                df = df.drop(df.index[selected_index])
+                df.reset_index(drop=True, inplace=True)
+                save_results(df)
+                st.success(f"تم حذف الصف رقم {selected_index} بنجاح ✅")
+                st.experimental_rerun()
+            else:
+                st.warning("⚠️ لا توجد نتائج لحذفها.")
+
+    with col2:
+        if st.button("❌ حذف كل النتائج"):
+            clear_results()
+            st.success("تم حذف جميع النتائج ✅")
+            st.experimental_rerun()
+
+    with col3:
         excel_bytes = results_to_excel_bytes(df)
         st.download_button(
-            label="Download results (Excel)",
+            label="⬇️ تحميل النتائج (Excel)",
             data=excel_bytes,
             file_name="results.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-    if st.button("Refresh results"):
-        st.experimental_rerun()
-    if st.button("Clear all results"):
-        clear_results()
-        st.success("All results deleted.")
-        st.experimental_rerun()
 
 st.markdown("---")
-
-# ----------------- Text-based Chat with AI -----------------
-st.header("Chat with AI")
-st.markdown("اكتب سؤالك أو تعليقك هنا، والذكاء الصناعي سيرد عليك نصيًا وبصوت.")
-
-user_input = st.text_area("💬 اكتب رسالتك:", placeholder="مثلاً: ما الفرق بين عيب المورد وعيب التجميع؟")
-
-if st.button("إرسال إلى الذكاء الصناعي"):
-    if not user_input.strip():
-        st.warning("الرجاء كتابة رسالة أولاً.")
-    else:
-        with st.spinner("جارٍ توليد الرد..."):
-            try:
-                response = openai.ChatCompletion.create(
-                    model=GPT_MODEL,
-                    messages=[
-                        {"role": "system", "content": "You are a helpful Arabic-speaking assistant specialized in diagnosing manufacturing part defects."},
-                        {"role": "user", "content": user_input}
-                    ],
-                    max_tokens=500,
-                    temperature=0.4,
-                )
-                ai_text = response["choices"][0]["message"]["content"].strip()
-                st.markdown(f"**🤖 رد الذكاء الصناعي:** {ai_text}")
-
-                # تحويل الرد إلى صوت
-                try:
-                    tts = gTTS(ai_text, lang="ar")
-                    tts_path = "ai_response.mp3"
-                    tts.save(tts_path)
-                    audio_bytes = open(tts_path, "rb").read()
-                    st.audio(audio_bytes, format="audio/mp3")
-                except Exception as e:
-                    st.error(f"فشل تحويل الصوت: {e}")
-
-            except Exception as e:
-                st.error(f"حدث خطأ أثناء التواصل مع OpenAI: {e}")
-
-st.markdown("---")
-st.markdown('<div class="signature">✨ Designed by Mohamed Ashraf ✨</div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center; font-weight:bold;">✨ Designed by Mohamed Ashraf ✨</div>', unsafe_allow_html=True)
