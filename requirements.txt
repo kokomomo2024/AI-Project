@@ -1,7 +1,8 @@
 streamlit
-streamlit-webrtc
-soundfile
-gtts
-requests
-numpy
+openai
 pandas
+numpy
+requests
+gtts
+soundfile
+streamlit-webrtc
