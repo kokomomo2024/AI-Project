@@ -5,13 +5,11 @@ import random
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
-import numpy as np
-import soundfile as sf
-import openai
 from gtts import gTTS
+from openai import OpenAI  # ✅ new import
 
 # ----------------- Configuration -----------------
-openai.api_key = os.getenv("OPENAI_API_KEY", "")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))  # ✅ new API usage
 RESULTS_PATH = "results.xlsx"
 GPT_MODEL = os.getenv("GPT_MODEL", "gpt-4o-mini")
 
@@ -109,9 +107,13 @@ with left:
         if st.button("Analyze (text only)"):
             with st.spinner("Analyzing..."):
                 result_ar = classify_image_text_only(image)
-                st.markdown(f"<h2 style='color:#c2185b'>Result: <span style='background:rgba(255,255,255,0.88);padding:6px 10px;border-radius:8px;font-weight:700;'>{result_ar}</span></h2>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<h2 style='color:#c2185b'>Result: "
+                    f"<span style='background:rgba(255,255,255,0.88);padding:6px 10px;border-radius:8px;font-weight:700;'>{result_ar}</span></h2>",
+                    unsafe_allow_html=True,
+                )
                 save_result(uploaded_file.name, result_ar)
-                st.success("تم حفظ النتيجة في الملف results.xlsx")
+                st.success("Result saved to results.xlsx")
 
 with right:
     st.subheader("Actions")
@@ -121,33 +123,34 @@ with right:
         st.dataframe(df)
         excel_bytes = results_to_excel_bytes(df)
         st.download_button(
-            label="Download results (Excel)",
+            label="📥 Download results (Excel)",
             data=excel_bytes,
             file_name="results.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-    if st.button("Refresh results"):
+    if st.button("🔄 Refresh results"):
         st.experimental_rerun()
-    if st.button("Clear all results"):
+    if st.button("🗑️ Delete all results"):
         clear_results()
-        st.success("All results deleted.")
+        st.success("✅ All results have been deleted successfully.")
         st.experimental_rerun()
 
 st.markdown("---")
 
 # ----------------- Text-based Chat with AI -----------------
-st.header("Chat with AI")
-st.markdown("اكتب سؤالك أو تعليقك هنا، والذكاء الصناعي سيرد عليك نصيًا وبصوت.")
+st.header("💬 Chat with AI")
+st.markdown("Type your question or comment below, and the AI will reply in Arabic (text + voice).")
 
-user_input = st.text_area("💬 اكتب رسالتك:", placeholder="مثلاً: ما الفرق بين عيب المورد وعيب التجميع؟")
+user_input = st.text_area("✏️ Type your message:", placeholder="For example: What is the difference between supplier defect and assembly defect?")
 
-if st.button("إرسال إلى الذكاء الصناعي"):
+if st.button("Send to AI"):
     if not user_input.strip():
-        st.warning("الرجاء كتابة رسالة أولاً.")
+        st.warning("Please enter a message first.")
     else:
-        with st.spinner("جارٍ توليد الرد..."):
+        with st.spinner("Generating AI response..."):
             try:
-                response = openai.ChatCompletion.create(
+                # ✅ new API call
+                response = client.chat.completions.create(
                     model=GPT_MODEL,
                     messages=[
                         {"role": "system", "content": "You are a helpful Arabic-speaking assistant specialized in diagnosing manufacturing part defects."},
@@ -156,10 +159,10 @@ if st.button("إرسال إلى الذكاء الصناعي"):
                     max_tokens=500,
                     temperature=0.4,
                 )
-                ai_text = response["choices"][0]["message"]["content"].strip()
-                st.markdown(f"**🤖 رد الذكاء الصناعي:** {ai_text}")
+                ai_text = response.choices[0].message.content.strip()
+                st.markdown(f"**🤖 AI Response:** {ai_text}")
 
-                # تحويل الرد إلى صوت
+                # ✅ Convert AI reply to Arabic audio
                 try:
                     tts = gTTS(ai_text, lang="ar")
                     tts_path = "ai_response.mp3"
@@ -167,10 +170,10 @@ if st.button("إرسال إلى الذكاء الصناعي"):
                     audio_bytes = open(tts_path, "rb").read()
                     st.audio(audio_bytes, format="audio/mp3")
                 except Exception as e:
-                    st.error(f"فشل تحويل الصوت: {e}")
+                    st.error(f"Text-to-speech failed: {e}")
 
             except Exception as e:
-                st.error(f"حدث خطأ أثناء التواصل مع OpenAI: {e}")
+                st.error(f"Error communicating with OpenAI: {e}")
 
 st.markdown("---")
 st.markdown('<div class="signature">✨ Designed by Mohamed Ashraf ✨</div>', unsafe_allow_html=True)
