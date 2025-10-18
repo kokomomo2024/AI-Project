@@ -1,0 +1,7 @@
+streamlit
+streamlit-webrtc
+soundfile
+gtts
+requests
+numpy
+pandas
